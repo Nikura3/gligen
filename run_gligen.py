@@ -4,12 +4,14 @@ import time
 
 import torch
 import numpy as np
+import pandas as pd
 import torchvision.utils
 from PIL import Image
 from diffusers import StableDiffusionGLIGENPipeline
 import torchvision.transforms.functional as tf
 import torchvision.utils
 from diffusers.utils import load_image
+import math
 
 from utils import logger, visual_utils
 from utils.drawer import DashedImageDraw
@@ -161,6 +163,23 @@ def make_QBench():
     }
     return data_dict
 
+def readPromptsCSV(path):
+    df = pd.read_csv(path, dtype={'id': str})
+    conversion_dict={}
+    for i in range(0,len(df)):
+        conversion_dict[df.at[i,'id']] = {
+            'prompt': df.at[i,'prompt'],
+            'obj1': df.at[i,'obj1'],
+            'bbox1':df.at[i,'bbox1'],
+            'obj2': df.at[i,'obj2'],
+            'bbox2':df.at[i,'bbox2'],
+            'obj3': df.at[i,'obj3'],
+            'bbox3':df.at[i,'bbox3'],
+            'obj4': df.at[i,'obj4'],
+            'bbox4':df.at[i,'bbox4'],
+        }
+    
+    return conversion_dict   
 
 def main():
 
@@ -179,30 +198,51 @@ def main():
     seeds = range(1,17)
 
     #bench=make_tinyHRS()
-    bench=make_QBench()
+    bench=readPromptsCSV(os.path.join("prompts","prompt_collection_bboxes.csv"))
 
-    model_name="prova_nuovo_logger"
+    model_name="PromptCollection-G"
     
     if (not os.path.isdir("./results/"+model_name)):
             os.makedirs("./results/"+model_name)
             
     #intialize logger
     l=logger.Logger("./results/"+model_name+"/")
+    
+    # ids to iterate the dict
+    ids = []
+    for i in range(0,len(bench)):
+        ids.append(str(i).zfill(3))
 
-    for sample_to_generate in range(0,len(bench)):
+    for id in ids:
+        bboxes=[]
+        phrases=[""]
+        
+        if not (isinstance(bench[id]['obj1'], (int,float)) and math.isnan(bench[id]['obj1'])):
+            phrases[0]=bench[id]['obj1']
+            bboxes.append([int(x) for x in bench[id]['bbox1'].split(',')])
+        if not math.isnan(bench[id]['obj2']):
+            phrases[0]=phrases[0]+", "+bench[id]['obj2']
+            bboxes.append([int(x) for x in bench[id]['bbox2'].split(',')])
+        if not math.isnan(bench[id]['obj3']):
+            phrases[0]=phrases[0]+", "+bench[id]['obj3']
+            bboxes.append([int(x) for x in bench[id]['bbox3'].split(',')])
+        if not math.isnan(bench[id]['obj4']):
+            phrases[0]=phrases[0]+", "+bench[id]['obj4']
+            bboxes.append([int(x) for x in bench[id]['bbox4'].split(',')])            
 
-        output_path = "./results/"+model_name+"/"+ bench[sample_to_generate]['id']+'_'+bench[sample_to_generate]['prompt'] + "/"
+        output_path = "./results/"+model_name+"/"+ id +'_'+bench[id]['prompt'] + "/"
 
         if (not os.path.isdir(output_path)):
             os.makedirs(output_path)
 
-        print("Sample number ",sample_to_generate)
+        print("Sample number ",id)
         torch.cuda.empty_cache()
 
         gen_images=[]
         gen_bboxes_images=[]
         #BB: [xmin, ymin, xmax, ymax] normalized between 0 and 1
-        normalized_boxes = NormalizeData(bench[sample_to_generate]['bboxes'])
+        normalized_boxes = NormalizeData(bboxes)
+
         start = time.time()
         for seed in seeds:
             print(f"Current seed is : {seed}")
@@ -215,15 +255,16 @@ def main():
             else:
                 g = torch.Generator('cpu').manual_seed(seed)
 
-            images = pipe(prompt=bench[sample_to_generate]['prompt'],
-                        gligen_phrases=bench[sample_to_generate]['phrases'],
+            images = pipe(prompt=bench[id]['prompt'],
+                        gligen_phrases=phrases,
                         gligen_boxes=normalized_boxes,
                         gligen_scheduled_sampling_beta=1,
                         height=height,
                         width=width,
                         output_type="pil",
                         num_inference_steps=50,
-                        generator=g).images
+                        generator=g,
+                        negative_prompt='low quality, low res, distortion, watermark, monochrome, cropped, mutation, bad anatomy, collage, border, tiled').images
 
             # end stopwatch
             end = time.time()
@@ -236,16 +277,22 @@ def main():
             gen_images.append(tf.pil_to_tensor(image))
 
             #draw the bounding boxes
-            image=torchvision.utils.draw_bounding_boxes(tf.pil_to_tensor(image),torch.Tensor(bench[sample_to_generate]['bboxes']),labels=bench[sample_to_generate]['phrases'],colors=['blue', 'red', 'purple', 'orange', 'green', 'yellow', 'black', 'gray', 'white'],width=4)
+            image=torchvision.utils.draw_bounding_boxes(tf.pil_to_tensor(image),
+                                                        torch.Tensor(bboxes),
+                                                        labels=phrases,
+                                                        colors=['green', 'green', 'green', 'green', 'green', 'green', 'green', 'green', 'green'],
+                                                        width=4,
+                                                        font='font.ttf',
+                                                        font_size=20)
             #list of tensors
             gen_bboxes_images.append(image)
             tf.to_pil_image(image).save(output_path+str(seed)+"_bboxes.png")
 
         # save a grid of results across all seeds without bboxes
-        tf.to_pil_image(torchvision.utils.make_grid(tensor=gen_images,nrow=4,padding=0)).save(output_path +"/"+ bench[sample_to_generate]['prompt'] + ".png")
+        tf.to_pil_image(torchvision.utils.make_grid(tensor=gen_images,nrow=4,padding=0)).save(output_path +"/"+ bench[id]['prompt'] + ".png")
 
         # save a grid of results across all seeds with bboxes
-        tf.to_pil_image(torchvision.utils.make_grid(tensor=gen_bboxes_images,nrow=4,padding=0)).save(output_path +"/"+ bench[sample_to_generate]['prompt'] + "_bboxes.png")
+        tf.to_pil_image(torchvision.utils.make_grid(tensor=gen_bboxes_images,nrow=4,padding=0)).save(output_path +"/"+ bench[id]['prompt'] + "_bboxes.png")
     
     # log gpu stats
     l.log_gpu_memory_instance()
