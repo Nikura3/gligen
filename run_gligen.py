@@ -184,7 +184,7 @@ def readPromptsCSV(path):
 def main():
 
     pipe = StableDiffusionGLIGENPipeline.from_pretrained(
-        "masterful/gligen-1-4-generation-text-box")
+        "masterful/gligen-1-4-generation-text-box",safety_checker=None)
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
