@@ -221,13 +221,13 @@ def main():
             phrases.append(bench[id]['obj1'])
             bboxes.append([int(x) for x in bench[id]['bbox1'].split(',')])
         if not (isinstance(bench[id]['obj2'], (int,float)) and math.isnan(bench[id]['obj2'])):
-            phrases.append(bench[id]['obj1'])
+            phrases.append(bench[id]['obj2'])
             bboxes.append([int(x) for x in bench[id]['bbox2'].split(',')])
         if not (isinstance(bench[id]['obj3'], (int,float)) and math.isnan(bench[id]['obj3'])):
-            phrases.append(bench[id]['obj1'])
+            phrases.append(bench[id]['obj3'])
             bboxes.append([int(x) for x in bench[id]['bbox3'].split(',')])
         if not (isinstance(bench[id]['obj4'], (int,float)) and math.isnan(bench[id]['obj4'])):
-            phrases.append(bench[id]['obj1'])
+            phrases.append(bench[id]['obj4'])
             bboxes.append([int(x) for x in bench[id]['bbox4'].split(',')])            
 
         output_path = "./results/"+model_name+"/"+ id +'_'+bench[id]['prompt'] + "/"
