@@ -1,4 +1,4 @@
-# Testing GLIGEN for my master's thesis
+# Testing GLIGEN for my master thesis
 
 <div align="center">
 <h1>Training-Free Layout Control with Cross-Attention Guidance</h1>
